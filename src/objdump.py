@@ -185,6 +185,29 @@ ARM32_SETTINGS: ArchSettings = ArchSettings(
     branch_likely_instructions=set(),
 )
 
+AARCH64_BRANCH_INSTRUCTIONS: Set[str] = {
+    "b", "bl", "br", "blr", "ret",
+    "b.eq", "b.ne", "b.cs", "b.cc", "b.mi", "b.pl", "b.vs", "b.vc",
+    "b.hi", "b.ls", "b.ge", "b.lt", "b.gt", "b.le", "b.al",
+    "cbz", "cbnz", "tbz", "tbnz",
+}
+
+AARCH64_SETTINGS: ArchSettings = ArchSettings(
+    name="aarch64",
+    re_comment=re.compile(r"(<.*>|//.*$)"),
+    re_reg=re.compile(
+        r"\b([xw](30|[12]?[0-9])|[vsdq](3[01]|[12]?[0-9])|lr|xzr|wzr)\b"
+    ),
+    re_includes_sp=re.compile(r"\b(sp|x29)\b"),
+    sp_ref_insns=["add", "sub", "stp", "ldp", "str", "ldr"],
+    re_sprel=re.compile(r"sp, #-?(0x[0-9a-fA-F]+|[0-9]+)\b"),
+    reloc_str="R_AARCH64_",
+    executable=["llvm-objdump"],
+    arguments=["-d", "-r", "--no-leading-addr"],
+    branch_instructions=AARCH64_BRANCH_INSTRUCTIONS,
+    branch_likely_instructions=set(),
+)
+
 
 def get_arch(o_file: str) -> ArchSettings:
     # https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.eheader.html
@@ -200,7 +223,9 @@ def get_arch(o_file: str) -> ArchSettings:
         return PPC_SETTINGS
     if arch == 40:
         return ARM32_SETTINGS
-    raise Exception("Bad ELF")
+    if arch == 183:
+        return AARCH64_SETTINGS
+    raise Exception(f"Bad ELF (e_machine={arch})")
 
 
 def parse_relocated_line(line: str) -> Tuple[str, str, str]:
@@ -336,6 +361,8 @@ def process_reloc(
         new_repl = process_ppc_reloc(reloc_row, prev, repl)
     elif "R_ARM_" in reloc_row:
         new_repl = process_arm32_reloc(reloc_row, prev, repl)
+    elif "R_AARCH64_" in reloc_row:
+        new_repl = repl
     else:
         raise Exception(f"unknown relocation type: {reloc_row}")
 
